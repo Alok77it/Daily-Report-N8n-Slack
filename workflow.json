@@ -1,0 +1,130 @@
+{
+  "name": "DailyReport",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -704,
+        0
+      ],
+      "id": "b98769f3-6be0-4d77-99f9-70d6fb6175d8",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "command": "python3 /report.py"
+      },
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        0
+      ],
+      "id": "4a7af987-43b6-4058-a8b4-c3df1cfed696",
+      "name": "Execute a command",
+      "credentials": {
+        "sshPassword": {
+          "id": "YRHr4JOSgPfcBeDx",
+          "name": "SSH Password account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the stdout as JSON\nlet raw = $json[\"stdout\"];\n\n// Sometimes backup info is printed before JSON, let's separate it\nlet backupInfo = \"\";\nlet jsonData = {};\ntry {\n    const firstBrace = raw.indexOf(\"{\");\n    if (firstBrace > 0) {\n        backupInfo = raw.slice(0, firstBrace).trim();\n        jsonData = JSON.parse(raw.slice(firstBrace));\n    } else {\n        jsonData = JSON.parse(raw);\n    }\n} catch (err) {\n    return [{ json: { text: \"❌ Error parsing server data: \" + err.message } }];\n}\n\n// Extract relevant info\nconst system = jsonData.system || {};\nconst services = jsonData.services || {};\nconst cronJobs = jsonData.cron_jobs || {};\nconst backupExists = jsonData.backup_exists;\nconst network = jsonData.network || {};\nconst uptime = jsonData.uptime || \"\";\n\n// Build report\nlet report = `*📊 Daily Server Report*\\n\\n`;\n\n// Backup\nreport += backupExists ? `✅ Backup exists for today.\\n` : `⚠️ Backup is missing!\\n`;\n\n// System stats\nreport += `*System Stats:*\\n`;\nreport += `- CPU Usage: ${system.cpu_percent ?? 0}%\\n`;\nreport += `- RAM Usage: ${system.ram_used_mb ?? 0} MB / ${system.ram_total_mb ?? 0} MB\\n`;\nreport += `- Swap Usage: ${system.swap_used_mb ?? 0} MB / ${system.swap_total_mb ?? 0} MB\\n`;\n\n// Services\nreport += `*Services:*\\n`;\nfor (const [name, status] of Object.entries(services)) {\n    report += status ? `- ✅ ${name} running\\n` : `- ⚠️ ${name} down\\n`;\n}\n\n// Cron jobs\nreport += `*Cron Jobs:*\\n`;\nfor (const [job, status] of Object.entries(cronJobs)) {\n    report += status ? `- ✅ ${job} succeeded\\n` : `- ⚠️ ${job} failed\\n`;\n}\n\n// Network\nreport += `*Network Stats:*\\n`;\nreport += `- Sent: ${network.bytes_sent_mb ?? 0} MB (${network.sent_mbps ?? 0} Mbps)\\n`;\nreport += `- Received: ${network.bytes_recv_mb ?? 0} MB (${network.recv_mbps ?? 0} Mbps)\\n`;\n\n// Uptime\nreport += `*Uptime:* ${uptime}\\n`;\n\n// Include backup info if available\nif (backupInfo) {\n    report += `\\n*Backup Info:* ${backupInfo}\\n`;\n}\n\n// Return for Slack node\nreturn [{ json: { text: report } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        0
+      ],
+      "id": "e8190e8c-a472-4a85-9bfe-4e1ef52f5964",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#ys-alerts",
+          "mode": "name"
+        },
+        "text": "={{ $json['text'] }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        112,
+        0
+      ],
+      "id": "8ebe27ce-9837-4766-bc73-73cc7c5afd67",
+      "name": "Send a message",
+      "webhookId": "6dedbcd6-27e7-44cd-89d1-e99ca9cdd3ee",
+      "credentials": {
+        "slackApi": {
+          "id": "MHBLXoeV5djx38gg",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a command": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "341d3456-1169-44eb-b390-80c2d34f4722",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0f12c85c960ef776acd46c75ba99b5fc9aaa7e1f1f72cb4de199d3bcc6b6e004"
+  },
+  "id": "5QO2unz2PwENuCQT",
+  "tags": []
+}
